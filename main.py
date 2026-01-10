@@ -6,6 +6,19 @@ import os
 import colorama
 import urllib
 from urllib.parse import urljoin
+from tqdm import tqdm
+
+def print_red(text, *args, **kwargs):
+    print(colorama.Fore.RED + text + colorama.Style.RESET_ALL, *args, **kwargs)
+
+def print_green(text, *args, **kwargs):
+    print(colorama.Fore.GREEN + text + colorama.Style.RESET_ALL, *args, **kwargs)
+
+def print_blue(text, *args, **kwargs):
+    print(colorama.Fore.BLUE + text + colorama.Style.RESET_ALL, *args, **kwargs)
+
+def print_yellow(text, *args, **kwargs):
+    print(colorama.Fore.YELLOW + text + colorama.Style.RESET_ALL, *args, **kwargs)
 
 def p_json(j):
     print(json.dumps(j, indent=2))
@@ -25,6 +38,7 @@ class GzctfDumper:
         self.session = self.login(url, username, password)
         self.url = url
         self.output_dir = output_dir
+        self.games = self.get_games()
         self.game_id = self.get_game_id()
         self.challs = self.get_game_challs()
 
@@ -47,7 +61,8 @@ class GzctfDumper:
             return session
         except requests.exceptions.HTTPError as e:
             print(f"An HTTP error occurred: {e}")
-            self.logout()
+            if res.status_code == 401:
+                print_red("Incorrect username or password")
             exit(1)
 
     def logout(self):
@@ -63,28 +78,26 @@ class GzctfDumper:
         
         try:
             res.raise_for_status()
-            return json.loads(res.text)
+            return json.loads(res.text)['data']
         except requests.exceptions.HTTPError as e:
             print(f"An HTTP error occurred: {e}")
             self.logout()
             exit(1)
 
     def get_game_id(self):
-        games = self.get_games()['data']
-        if len(games) == 1:
-            self.game_id = games[0]['id']
+        if len(self.games) == 1:
+            self.game_id = self.games[0]['id']
         else:
-            for i, game in enumerate(games, 1):
+            for i, game in enumerate(self.games, 1):
                 n = f"[{i}] "
                 title = game['title']
                 summary = game['summary']
-                print(colorama.Fore.GREEN + n, end="")
-                print(colorama.Fore.BLUE + "Title: " + title)
-                print(colorama.Fore.YELLOW + " "*len(n) + "Summary: " + summary)
+                print_green(n, end="")
+                print_yellow("Title: " + title)
+                print_blue(" "*len(n) + "Summary: " + summary)
 
-            print(colorama.Fore.LIGHTRED_EX + colorama.Style.BRIGHT + "There are multiple games available")
-            print("Enter the number of the game you want to dump")
-            print(colorama.Style.RESET_ALL, end="")
+            print_red("There are multiple games available")
+            print_red("Enter the number of the game you want to dump")
 
             while True:
                 choice = input(">> ")
@@ -92,18 +105,16 @@ class GzctfDumper:
                 try:
                     choice = int(choice)
                 except:
-                    print(colorama.Fore.RED + "Please enter valid game number")
-                    print(colorama.Style.RESET_ALL, end="")
+                    print_red("Please enter valid game number")
                     continue
                 
-                if choice < 1 or choice > len(games):
-                    print(colorama.Fore.RED + "Please enter valid game number")
-                    print(colorama.Style.RESET_ALL, end="")
+                if choice < 1 or choice > len(self.games):
+                    print_red("Please enter valid game number")
                     continue
                 
                 break
 
-            return games[choice-1]['id']
+            return self.games[choice-1]['id']
 
 
     def get_game_info(self, game_id):
@@ -124,8 +135,8 @@ class GzctfDumper:
         
         try:
             res.raise_for_status()
-            res = json.loads(res.text)
-            return res['challenges']
+            challenges = json.loads(res.text)['challenges']
+            return challenges
             
         except requests.exceptions.HTTPError as e:
             print(f"An HTTP error occurred: {e}")
@@ -145,28 +156,39 @@ class GzctfDumper:
             exit(1)
 
     def print_challs(self):
+        print_yellow("[#] Game Challenges")
         for category, challs in self.challs.items():
-            print(colorama.Style.BRIGHT + colorama.Fore.BLUE + category)
+            print_blue(f"   [#] {category}")
             for chall in challs:
+                chall_info = f"       [-] {chall['title']} ({chall['score']})"
                 if chall['solved']:
-                    print(colorama.Fore.GREEN + "[SOLVED] ".ljust(11, " "), end="")
+                    chall_info += " [SOLVED]"
+                    print_green(chall_info)
                 else:
-                    print(colorama.Fore.RED + "[UNSOLVED] ", end="")
+                    chall_info += " [NOT SOLVED]"
+                    print_red(chall_info)
 
-                print(f"{chall['title']} ({chall['score']})")
+    def download_attachment(self, url, out, size):
+        with self.session.get(url, stream=True) as res:
+            with tqdm(total=size, desc=out, unit='B', unit_scale=True, colour='blue', leave=False) as pb:
+                with open(out, 'wb') as f:
+                    try:
+                        res.raise_for_status()
 
-        print(colorama.Style.RESET_ALL, end="")
+                        for chunk in res.iter_content(chunk_size=8192):
+                            pb.update(len(chunk))
+                            f.write(chunk)
 
-    def download_attachment(self, url, out):
-        with urllib.request.urlopen(url) as res:
-            with open(out, 'wb') as f:
-                f.write(res.read())
-        print(f"{out} downloaded")
+                    except requests.exceptions.HTTPError as e:
+                        print(f"An HTTP error occurred: {e}")
+                        self.logout()
+                        return False
+        return True
 
     def dump_challs(self):
+        print_yellow("[#] Downloading challenges attachments")
         for category, challs in self.challs.items():
             category_dir = os.path.join(self.output_dir, category)
-            prepare_dir(category_dir)
 
             for chall in challs:
                 info = self.get_chall_info(chall['id'])
@@ -180,10 +202,15 @@ class GzctfDumper:
                 att_size = info['context']['fileSize']
 
                 url = urljoin(self.url, att_url)
-                out = os.path.join(category_dir, att_filename)
 
-                prepare_dir(category_dir)
-                self.download_attachment(url, out)
+                chall_dir = os.path.join(category_dir, title)
+                out = os.path.join(chall_dir, att_filename)
+                prepare_dir(chall_dir)
+
+                if self.download_attachment(url, out, att_size):
+                    print_green(f"    [-] {out} downloaded")
+                else:
+                    print_red (f"    [-] {out} download failed")
             
 
     def dump_game(self):
@@ -211,10 +238,10 @@ class GzctfDumper:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-            description="A simple python script for dumping gzctf games")
+            description="A simple python script for dumping GZ:CTF games")
 
     parser.add_argument('url',
-                        help="The base URL to gzctf instance")
+                        help="The base URL of GZ:CTF instance")
     parser.add_argument('-u', '--username',
                         help="The username to login with (omit for interactive username input)")
     parser.add_argument('-p', '--password',
