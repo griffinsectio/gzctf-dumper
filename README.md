@@ -12,7 +12,9 @@ pip install -r requirements.txt
 ```
 
 ## Usage
-To use the script to dump a GZ::CTF game challenges the user and password to login to the platform with is required. **To avoid credential leak, run the script without `-u`/`--user` and `p`/`--password` arguments and the script will ask the username and password interactively**. The url where the game is hosted is required and can be passed to the script as positional argument. By default, the script will store the dump in `./Dump` directory, but another directory can be specified by passing the path to `-o`/`--out` argument.
+- To use the script to dump a GZ::CTF game challenges the user and password to login to the platform with is required. **To avoid credential leak, run the script without `-u`/`--user` and `p`/`--password` arguments and the script will ask the username and password interactively**.
+- The url where the game is hosted is required and can be passed to the script as positional argument.
+- By default, the script will store the dump in `./Dump` directory, but another directory can be specified by passing the path to `-o`/`--out` argument.
 
 ## Demonstration
 ```
