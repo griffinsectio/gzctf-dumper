@@ -17,13 +17,11 @@ def print_yellow(text, *args, **kwargs):
 def p_json(j):
     print(json.dumps(j, indent=2))
 
-def prepare_dir(path):
-    if not os.path.isdir(path):
-        os.makedirs(path)
+def makedirs(path):
+    os.makedirs(path)
+
+def is_dir_exists(path):
+    return os.path.isdir(path)
 
 def is_dir_empty(path):
-    if len(os.listdir(path)):
-        return False
-    else:
-        return True
-
+    return not bool(len(os.listdir(path)))
