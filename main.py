@@ -3,35 +3,10 @@ import argparse
 import requests
 import getpass
 import os
-import colorama
 import urllib
 from urllib.parse import urljoin
 from tqdm import tqdm
-
-def print_red(text, *args, **kwargs):
-    print(colorama.Fore.RED + text + colorama.Style.RESET_ALL, *args, **kwargs)
-
-def print_green(text, *args, **kwargs):
-    print(colorama.Fore.GREEN + text + colorama.Style.RESET_ALL, *args, **kwargs)
-
-def print_blue(text, *args, **kwargs):
-    print(colorama.Fore.BLUE + text + colorama.Style.RESET_ALL, *args, **kwargs)
-
-def print_yellow(text, *args, **kwargs):
-    print(colorama.Fore.YELLOW + text + colorama.Style.RESET_ALL, *args, **kwargs)
-
-def p_json(j):
-    print(json.dumps(j, indent=2))
-
-def prepare_dir(path):
-    if not os.path.isdir(path):
-        os.makedirs(path)
-
-def is_dir_empty(path):
-    try:
-        return next(os.scandir(path))
-    except StopIteration:
-        return True
+import utils.utils as utils
 
 class GzctfDumper:
     def __init__(self, url, username, password, output_dir):
@@ -62,7 +37,7 @@ class GzctfDumper:
         except requests.exceptions.HTTPError as e:
             print(f"An HTTP error occurred: {e}")
             if res.status_code == 401:
-                print_red("Incorrect username or password")
+                utils.print_red("Incorrect username or password")
             exit(1)
 
     def logout(self):
@@ -92,12 +67,12 @@ class GzctfDumper:
                 n = f"[{i}] "
                 title = game['title']
                 summary = game['summary']
-                print_green(n, end="")
-                print_yellow("Title: " + title)
-                print_blue(" "*len(n) + "Summary: " + summary)
+                utils.print_green(n, end="")
+                utils.print_yellow("Title: " + title)
+                utils.print_blue(" "*len(n) + "Summary: " + summary)
 
-            print_red("There are multiple games available")
-            print_red("Enter the number of the game you want to dump")
+            utils.print_red("There are multiple games available")
+            utils.print_red("Enter the number of the game you want to dump")
 
             while True:
                 choice = input(">> ")
@@ -105,11 +80,11 @@ class GzctfDumper:
                 try:
                     choice = int(choice)
                 except:
-                    print_red("Please enter valid game number")
+                    utils.print_red("Please enter valid game number")
                     continue
                 
                 if choice < 1 or choice > len(self.games):
-                    print_red("Please enter valid game number")
+                    utils.print_red("Please enter valid game number")
                     continue
                 
                 break
@@ -156,37 +131,37 @@ class GzctfDumper:
             exit(1)
 
     def print_challs(self):
-        print_yellow("[#] Game Challenges")
+        utils.print_yellow("[#] Game Challenges")
         for category, challs in self.challs.items():
-            print_blue(f"   [#] {category}")
+            utils.print_blue(f"    [#] {category}")
             for chall in challs:
                 chall_info = f"       [-] {chall['title']} ({chall['score']})"
                 if chall['solved']:
                     chall_info += " [SOLVED]"
-                    print_green(chall_info)
+                    utils.print_green(chall_info)
                 else:
                     chall_info += " [NOT SOLVED]"
-                    print_red(chall_info)
+                    utils.print_red(chall_info)
 
     def download_attachment(self, url, out, size):
         with self.session.get(url, stream=True) as res:
             with tqdm(total=size, desc=out, unit='B', unit_scale=True, colour='blue', leave=False) as pb:
-                with open(out, 'wb') as f:
-                    try:
+                try:
+                    with open(out, 'wb') as f:
                         res.raise_for_status()
 
                         for chunk in res.iter_content(chunk_size=8192):
                             pb.update(len(chunk))
                             f.write(chunk)
 
-                    except requests.exceptions.HTTPError as e:
-                        print(f"An HTTP error occurred: {e}")
-                        self.logout()
-                        return False
+                except requests.exceptions.HTTPError as e:
+                    print(f"An HTTP error occurred: {e}")
+                    self.logout()
+                    return False
         return True
 
     def dump_challs(self):
-        print_yellow("[#] Downloading challenges attachments")
+        utils.print_yellow("[#] Downloading challenges attachments")
         for category, challs in self.challs.items():
             category_dir = os.path.join(self.output_dir, category)
 
@@ -205,19 +180,19 @@ class GzctfDumper:
 
                 chall_dir = os.path.join(category_dir, title)
                 out = os.path.join(chall_dir, att_filename)
-                prepare_dir(chall_dir)
+                utils.prepare_dir(chall_dir)
 
                 if self.download_attachment(url, out, att_size):
-                    print_green(f"    [-] {out} downloaded")
+                    utils.print_green(f"    [-] {out} downloaded")
                 else:
-                    print_red (f"    [-] {out} download failed")
+                    utils.print_red  (f"    [-] {out} download failed")
             
 
     def dump_game(self):
-        prepare_dir(self.output_dir)
+        utils.prepare_dir(self.output_dir)
 
-        if not is_dir_empty(self.output_dir):
-            print("The output directory is not empty")
+        if not utils.is_dir_empty(self.output_dir):
+            utils.print_red("The output directory is not empty")
 
             while True:
                 choice = input("Do you want to continue? [Y/n]: ")
@@ -229,26 +204,27 @@ class GzctfDumper:
                     break
                 elif (choice.lower() == "n" or
                     choice.lower() == "no"):
-                    exit()
+                    return
                 else:
-                    print("Please answer with yes/no")
+                    utils.print_red("Please answer with yes/no")
 
+        self.print_challs()
         self.dump_challs()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-            description="A simple python script for dumping GZ:CTF games")
+            description="A simple python script for dumping GZ::CTF games")
 
     parser.add_argument('url',
-                        help="The base URL of GZ:CTF instance")
+                        help="The base URL of GZ::CTF instance")
     parser.add_argument('-u', '--username',
                         help="The username to login with (omit for interactive username input)")
     parser.add_argument('-p', '--password',
                         help="The password for the user (omit for interactive password input)")
     parser.add_argument('-o', '--output',
                         default="Dump",
-                        help="Directory where to dump the files")
+                        help="Directory where to dump the files (default: ./Dump)")
 
     args = parser.parse_args()
 
@@ -264,6 +240,6 @@ if __name__ == "__main__":
 
     dumper = GzctfDumper(url, username, password, output_dir)
 
-    dumper.print_challs()
     dumper.dump_game()
+    dumper.logout()
 
